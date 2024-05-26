@@ -19,9 +19,21 @@ if (Test-Path $INSTALL_FOLDER_NAME -PathType Container) {
     # Write-Host ">> Installer will now exit..."
     # Exit 1
     # Echo Deleting Python folder
-    Write-Host "🗑️  Deleting $INSTALL_FOLDER_NAME folder..."
+    Write-Host "✅ Using installed version from $INSTALL_FOLDER_NAME folder..."
     # Delete the python folder
-    Remove-Item -Path .\$INSTALL_FOLDER_NAME -Recurse -Force
+    # Remove-Item -Path .\$INSTALL_FOLDER_NAME -Recurse -Force
+    # Check if PATH.txt exists
+    if (Test-Path PATH.txt) {
+        # Read the PATH.txt file
+        $python_path = Get-Content PATH.txt
+        # Add Path to current path
+        $env:Path = "$pwd;$pwd\Scripts;$env:Path"
+        $env:Path = "$python_path;$env:Path"
+        # Version
+        python --version
+        # Drop to a python shell
+        Exit 0
+    }
 }
 
 # Check AMD64 or x86
