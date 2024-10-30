@@ -1,5 +1,10 @@
 # Build ffmpeg and go-astiav using msys2 on windows 
 
+# code was created from workflow file (https://github.com/asticode/go-astiav/blob/bc148523bc707cb628df76f2811c579d8b69ce9b/.github/workflows/test.yml)
+# and patch (https://github.com/asticode/go-astiav/blob/bc148523bc707cb628df76f2811c579d8b69ce9b/.github/workflows/windows.patch)
+# and makefile (https://github.com/asticode/go-astiav/blob/bc148523bc707cb628df76f2811c579d8b69ce9b/Makefile)
+
+
 # Variables
 $InstallPath = "$PWD\compile"
 $Msys2Path = "$InstallPath\msys64"
@@ -76,7 +81,20 @@ make install-ffmpeg srcPath="$FFMPEG_PATH/src" version="$FFMPEG_VERSION" patchPa
 # 	cd $(srcPath) && make
 # 	cd $(srcPath) && make install
 
-# Build FFmpeg
-$env:CGO_LDFLAGS="-L$FFMPEG_PATH/lib/"
-$env:CGO_CFLAGS="-I$FFMPEG_PATH/include/"
-$env:PKG_CONFIG_PATH="$(bash -c 'cygpath -w "$FFMPEG_PATH/lib/pkgconfig"')"
+# Use FFmpeg from Build Cache
+# B:\Code\go\rtc_screen\compile\ffmpeg\lib
+$env:CGO_LDFLAGS="-L$FFMPEG_PATH/lib"
+$env:CGO_CFLAGS="-I$FFMPEG_PATH/include"
+$env:PKG_CONFIG_PATH=$(bash -c "cygpath -w $FFMPEG_PATH") + "\lib\pkgconfig"
+
+# Test if pkg-config works with built FFmpeg
+# pkg-config --print-errors libavcodec
+
+# Set Go Environment Variables
+# go env -w CGO_LDFLAGS="-L$FFMPEG_PATH/lib"
+# go env -w CGO_CFLAGS="-I$FFMPEG_PATH/include"
+# go env -w PKG_CONFIG_PATH="$(bash -c "cygpath -w $FFMPEG_PATH")\lib\pkgconfig"
+
+
+# $env:PKG_CONFIG_PATH="$FFMPEG_PATH/lib/pkgconfig"
+# go env -w PKG_CONFIG_PATH="$FFMPEG_PATH/lib/pkgconfig"
