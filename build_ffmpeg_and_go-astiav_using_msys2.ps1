@@ -102,10 +102,17 @@ bash -lc "
 # Run this Before Compiling go-astiav `make install-ffmpeg`
 # (or any other go project that uses ffmpeg lib)
 # (for pkg-config use `choco install pkgconfiglite`)
-#
+# 
+# *Add Gcc toolchain to the PATH
+# $env:PATH="$PWD/msys64/mingw64/bin;$PWD/msys64/usr/bin;$env:PATH"
+# *Add FFMpeg folder to PATH
+# $FFMPEG_PATH = "$PWD\ffmpeg"
 # $env:CGO_LDFLAGS="-L$FFMPEG_PATH/lib"
 # $env:CGO_CFLAGS="-I$FFMPEG_PATH/include"
-# $env:PKG_CONFIG_PATH=$(bash -c "cygpath -w $FFMPEG_PATH") + "\lib\pkgconfig"
+# $env:PKG_CONFIG_PATH=$(bash -c "cygpath -u $FFMPEG_PATH") + "\lib\pkgconfig"
+# *or
+# $env:PKG_CONFIG_PATH="$FFMPEG_PATH\lib\pkgconfig" 
+
 
 Write-Host -ForegroundColor Blue "Building FFmpeg Complete!"
 cd $current_folder
