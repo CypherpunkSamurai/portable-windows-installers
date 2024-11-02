@@ -1,57 +1,3 @@
-# Build ffmpeg and go-astiav using msys2 on windows 
-
-# code was created from workflow file (https://github.com/asticode/go-astiav/blob/bc148523bc707cb628df76f2811c579d8b69ce9b/.github/workflows/test.yml)
-# and patch (https://github.com/asticode/go-astiav/blob/bc148523bc707cb628df76f2811c579d8b69ce9b/.github/workflows/windows.patch)
-# and makefile (https://github.com/asticode/go-astiav/blob/bc148523bc707cb628df76f2811c579d8b69ce9b/Makefile)
-
-# Make
-# make install-ffmpeg srcPath="/b/Code/go/rtc_screen/compile/ffmpeg/src" version="n7.0" patchPath="/b/Code/go/rtc_screen/compile/go-astiav/.github/workflows/windows.patch"
-# here we call the Makefile in go-astiav to build FFmpeg
-# we provide the following parameters:
-# - srcPath: path to FFmpeg source code (it will clone it if missing)
-# - version: FFmpeg version to build (we use n7.0 here)
-# - patchPath: path to patch file to apply before
-#   (the patch file changes only 1 file, ffbuild/library.mak)
-#   (it 
-#       replaces: 
-#       "$(AR) $(ARFLAGS) $(AR_O) $^"
-#       with 2 lines:
-#       "$(file > objs.txt, $^)"
-#       $(AR) $(ARFLAGS) $(AR_O) @objs.txt
-# 
-
-# The Makefile Commands are Simple
-# install-ffmpeg:
-# 	rm -rf $(srcPath)
-# 	mkdir -p $(srcPath)
-# 	cd $(srcPath) && git clone https://github.com/FFmpeg/FFmpeg .
-# 	cd $(srcPath) && git checkout $(version)
-# ifneq "" "$(patchPath)"
-# 	cd $(srcPath) && git apply $(patchPath)
-# endif
-# 	cd $(srcPath) && ./configure --prefix=.. $(configure)
-# 	cd $(srcPath) && make
-# 	cd $(srcPath) && make install
-
-# How To Use FFmpeg Lib for go-astiav from Build Cache
-# B:\Code\go\rtc_screen\compile\ffmpeg\lib
-# $env:CGO_LDFLAGS="-L$FFMPEG_PATH/lib"
-# $env:CGO_CFLAGS="-I$FFMPEG_PATH/include"
-# $env:PKG_CONFIG_PATH=$(bash -c "cygpath -w $FFMPEG_PATH") + "\lib\pkgconfig"
-
-# Test if pkg-config works with built FFmpeg
-# pkg-config --print-errors libavcodec
-
-# Set Go Environment Variables (using go. not recommented)
-# go env -w CGO_LDFLAGS="-L$FFMPEG_PATH/lib"
-# go env -w CGO_CFLAGS="-I$FFMPEG_PATH/include"
-# go env -w PKG_CONFIG_PATH="$(bash -c "cygpath -w $FFMPEG_PATH")\lib\pkgconfig"
-
-# $env:PKG_CONFIG_PATH="$FFMPEG_PATH/lib/pkgconfig"
-# go env -w PKG_CONFIG_PATH="$FFMPEG_PATH/lib/pkgconfig"
-
-
-
 # ----------------------------------------------
 #       Build FFmpeg using MSYS2 on Windows
 # ----------------------------------------------
@@ -139,7 +85,7 @@ $env:MAKE = "mingw32-make"
 pacman -S --noconfirm --needed mingw-w64-x86_64-toolchain mingw-w64-x86_64-clang make yasm pkg-config autotools mingw-w64-x86_64-autotools
 
 # Build FFmpeg
-Write-Host -ForegroundColor Green "Building FFmpeg Step 1: Configure..."
+Write-Host -ForegroundColor Green "Starting Build..."
 cd $ffmpeg_compile_folder\src
 bash -lc ' '
 bash -lc 'pacman --noconfirm -Syuu'
@@ -148,8 +94,10 @@ bash -lc "
     echo 'Current Folder : ' $(pwd)
     # not really required but good for most projects to use autoreconf
     # autoreconf -fvi
-    ./configure
-    make V=1 check VERBOSE=t"
+    ./configure --prefix=..
+    # make V=1 check VERBOSE=t
+    make
+    make install"
 
 Write-Host -ForegroundColor Blue "Building FFmpeg Complete!"
 cd $current_folder
