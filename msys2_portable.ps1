@@ -2,6 +2,9 @@
 #      Msys2 Portable
 # -----------------------
 
+# read https://community.chocolatey.org/packages/msys2#files for
+# setup instructions
+
 # * Variables
 $msys2_portable_dir = "msys2-portable"
 $msys2_extract_dir = "$pwd\$msys2_portable_dir"
