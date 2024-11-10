@@ -29,10 +29,12 @@ function cleanup {
 }
 
 # Ask to Run Cleanup
-$cleanup_response = Read-Host -Prompt "Cleanup Before Build? (y/n)"
-if ($cleanup_response.ToLower() -eq "y") {
-    cleanup
-}
+# $cleanup_response = Read-Host -Prompt "Cleanup Before Build? (y/n)"
+# if ($cleanup_response.ToLower() -eq "y") {
+#     cleanup
+# } else {
+# Write-Host "No Clean..."
+# }
 
 # Checks
 if (!(Test-Path $msys2_installation)) {
