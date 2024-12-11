@@ -85,3 +85,4 @@ foreach ($repo in @("clang32", "clang64", "mingw", "mingw32", "mingw64", "msys",
 pacman -S --noconfirm --needed git zsh make diffutils patchutils grep which wget curl mingw-w64-x86_64-toolchain base-devel
 pacman -S --noconfirm --needed make yasm pkg-config autotools mingw-w64-x86_64-autotools
 pacman -S --noconfirm --needed mingw-w64-x86_64-clang
+pacman -S --noconfirm --needed mingw-w64-x86_64-bat
