@@ -9,7 +9,7 @@
 #  .\Msys2_Install.ps1 [-InstallPath <path>] [-VersionTag <tag>] [-NoUpdate] [-NoDevelopmentTools] [-NoMirrorOptimization] [-Force] [-help]
 # 
 # Run directly from the web:
-#  iwr -useb https://raw.githubusercontent.com/username/repo/main/Msys2_Install.ps1 | iex
+#  iwr -useb https://raw.githubusercontent.com/CypherpunkSamurai/portable-windows-installers/refs/heads/master/msys2_portable.ps1 | iex
 #  
 # Run from web with parameters:
 #  $params = @{InstallPath = "D:\msys2"; NoUpdate = $true}; 
