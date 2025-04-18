@@ -234,7 +234,7 @@ function Msys2ConfigDevelopmentTools {
     Write-Host "Installing development tools..."
     Invoke-MsysCommand -Msys2Path $Msys2Path -Command "pacman -S --noconfirm --needed git zsh make diffutils patchutils grep which wget curl mingw-w64-x86_64-toolchain base-devel"
     Invoke-MsysCommand -Msys2Path $Msys2Path -Command "pacman -S --noconfirm --needed make yasm pkg-config autotools mingw-w64-x86_64-autotools"
-    Invoke-MsysCommand -Msys2Path $Msys2Path -Command "pacman -S --noconfirm --needed mingw-w64-x86_64-clang"
+    Invoke-MsysCommand -Msys2Path $Msys2Path -Command "pacman -S --noconfirm --needed mingw-w64-x86_64-clang mingw-w64-x86_64-ninja mingw-w64-x86_64-cmake"
     Invoke-MsysCommand -Msys2Path $Msys2Path -Command "pacman -S --noconfirm --needed mingw-w64-x86_64-bat"
 }
 
