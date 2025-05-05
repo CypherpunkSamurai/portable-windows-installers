@@ -288,7 +288,8 @@ function Main {
     }
 
     Write-Host "MSYS2 has been installed successfully at $InstallPath"
-    Write-Host "You can start MSYS2 by running '$InstallPath\msys2_shell.cmd'"
+    Write-Host "You can start MSYS2 by running '$InstallPath\msys2_shell.cmd -defterm -here -no-start -mingw64 -shell bash'"
+    Out-File "$InstallPath\msys2_shell.cmd -defterm -here -no-start -mingw64 -shell bash" -FilePath .\MsysCmd_Mingw64.bat
 }
 
 # Execute the main function
