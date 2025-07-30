@@ -703,7 +703,7 @@ function Show-Usage {
     Write-ColorMessage "    .\Scripts\Activate.ps1 cargo new hello_world" "White"
     Write-ColorMessage "    cd hello_world" "White"
     Write-ColorMessage "    ..\Scripts\Activate.ps1 cargo run" "White"
-    Write-ColorMessage ""
+    Write-ColorMessage " " "White"
     Write-ColorMessage "  Traditional interactive mode:" "Cyan"
     Write-ColorMessage "    .\Scripts\Activate.ps1" "White"
     Write-ColorMessage "    cargo new my_project" "White"
