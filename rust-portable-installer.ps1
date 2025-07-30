@@ -418,10 +418,15 @@ USAGE INSTRUCTIONS (Enhanced venv-style):
    PS> .\Scripts\Activate.ps1 cargo --version
    PS> .\Scripts\Activate.ps1 cargo new my_project
    PS> .\Scripts\Activate.ps1 cargo build
+   PS> .\Scripts\Activate.ps1 cargo run --bin test_parser
 
    CMD:
    > Scripts\activate.bat cargo --version
    > Scripts\activate.bat cargo new my_project
+
+   IMPORTANT: In PowerShell, use the .ps1 script directly with commands.
+   Do NOT use: .\Scripts\activate.bat && cargo run (this won't work!)
+   Instead use: .\Scripts\Activate.ps1 cargo run
 
 3. DEACTIVATE the Rust environment:
    
@@ -710,6 +715,10 @@ function Show-Usage {
     Write-ColorMessage "    cd my_project" "White"
     Write-ColorMessage "    cargo run" "White"
     Write-ColorMessage "    deactivate" "White"
+    Write-ColorMessage " " "White"
+    Write-ColorMessage "  PowerShell command chaining (CORRECT way):" "Cyan"
+    Write-ColorMessage "    .\PortableRust\Scripts\Activate.ps1 cargo run --bin test_parser" "White"
+    Write-ColorMessage "    # NOT: .\PortableRust\Scripts\activate.bat && cargo run" "Gray"
     Write-ColorMessage "`n"
 }
 
