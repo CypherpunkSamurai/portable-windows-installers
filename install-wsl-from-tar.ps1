@@ -66,8 +66,14 @@ param(
     [switch]$NodePnpm,
 
     [Parameter(Mandatory = $false)]
-    [switch]$NodeBun
+    [switch]$NodeBun,
 
+    [Parameter(Mandatory = $false)]
+    [ValidateSet("bash", "zsh", "fish")]
+    [string]$Shell = "bash",
+
+    [Parameter(Mandatory = $false)]
+    [switch]$Ffmpeg
 )
 
 # Set error action preference
@@ -333,10 +339,11 @@ function Set-WSLConfiguration {
         # Update package lists
         Write-ColorOutput "Updating package lists..." "Cyan"
         wsl -d $DistroName -u root apt update -y
+        wsl -d $DistroName -u root apt upgrade -y
         
         # Install Ubuntu-specific essential packages
-        wsl -d $DistroName -u root apt install -y curl wget git vim nano htop build-essential software-properties-common apt-transport-https ca-certificates gnupg lsb-release openssh-client zsh zip unzip
-        
+        wsl -d $DistroName -u root apt install -y bash curl wget git vim nano htop build-essential software-properties-common apt-transport-https ca-certificates gnupg lsb-release openssh-client zip unzip
+        wsl -d $DistroName -u root apt install -y net-tools iputils-ping dnsutils
         # Configure timezone to UTC for WSL
         wsl -d $DistroName -u root ln -sf /usr/share/zoneinfo/UTC /etc/localtime
         
@@ -520,8 +527,87 @@ curl -fsSL https://bun.sh/install | bash
  
     Write-ColorOutput "✓ Development tools installation process completed." "Green"
 }
- 
- 
+
+# Function to install FFmpeg
+function Install-FFmpeg {
+    param(
+        [string]$DistroName,
+        [string]$Username
+    )
+
+    Write-ColorOutput "Installing FFmpeg..." "Yellow"
+
+    wsl -d $DistroName -u $Username apt install -y ffmpeg
+
+    Write-ColorOutput "✓ FFmpeg installation process completed." "Green"
+}
+
+# Function to install Oh-My-Bash
+function Install-Shell-Config {
+    param(
+        [string]$ShellName,
+        [string]$Username
+    )
+
+    if ($ShellName -eq "bash") {
+        Write-ColorOutput "Installing Oh-My-Bash..." "Yellow"
+        wsl -d $DistroName -u $Username apt install -y bash
+        wsl -d $DistroName -u $Username bash -c "bash -c $(wget https://raw.githubusercontent.com/ohmybash/oh-my-bash/master/tools/install.sh -O -)"
+        # OSH_THEME="random" or "simple" or "cypher"
+        wsl -d $DistroName -u $Username bash -c "echo 'export OSH_THEME=\"cypher\"' >> ~/.bashrc"
+        # Change Shell to Bash
+        wsl -d $DistroName -u $Username bash -c 'chsh -s $(which bash)'
+    }
+    elseif ($ShellName -eq "zsh") {
+        Write-ColorOutput "Installing Oh-My-Zsh..." "Yellow"
+        wsl -d $DistroName -u $Username apt install -y zsh
+        wsl -d $DistroName -u $Username "curl -fsSL https://install.ohmyz.sh | zsh"
+        # ZSH_THEME="random" or "simple" or "cypher"
+        wsl -d $DistroName -u $Username sh -c "echo 'export ZSH_THEME=\"cypher\"' >> ~/.zshrc"
+        # Change Shell to Zsh
+        wsl -d $DistroName -u $Username sh -c 'chsh -s $(which zsh)'
+    }
+    elseif ($ShellName -eq "fish") {
+        Write-ColorOutput "Installing Fish..." "Yellow"
+        wsl -d $DistroName -u $Username apt install -y fish
+        # Install Oh-My-Fish
+        wsl -d $DistroName -u $Username fish -c "curl https://raw.githubusercontent.com/oh-my-fish/oh-my-fish/master/bin/install | fish"
+        # Change Shell to Fish
+        wsl -d $DistroName -u $Username sh -c 'chsh -s $(which fish)'
+    }
+    else {
+        throw "Invalid shell name: $ShellName"
+    }
+}
+
+# Function to install Neovim
+function Install-Neovim {
+    param(
+        [string]$DistroName,
+        [string]$Username
+    )
+
+    Write-ColorOutput "Installing Neovim..." "Yellow"
+    
+    # Download Neovim Nightly
+    $downloadUrl = "https://github.com/neovim/neovim/releases/download/nightly/nvim-linux-x86_64.tar.gz"
+
+    wsl -d $DistroName -u $Username wget -O ~/nvim.tar.gz $downloadUrl
+
+    # Extract Neovim Nightly
+    wsl -d $DistroName -u $Username mkdir -p ~/.local/bin
+    wsl -d $DistroName -u $Username tar -xzf ~/nvim.tar.gz -C ~/.local/bin
+
+    # Install Kickstart Neovim Distro
+    wsl -d $DistroName -u $Username sh -c "apt install -y git"
+    wsl -d $DistroName -u $Username sh -c "git clone https://github.com/nvim-lua/kickstart.nvim.git ~/.config/nvim"
+
+    # Alias Neovim
+    wsl -d $DistroName -u $Username sh -c "echo 'alias nvim=\"~/.local/bin/nvim\"' >> ~/.bashrc"
+
+    Write-ColorOutput "✓ Neovim installation process completed." "Green"
+}
+
 # Function to test the installation
 function Test-WSLInstallation {
     param(
@@ -601,6 +687,16 @@ function Main {
     # Install development tools if requested
     if ($Python3Ubuntu -or $Python3Miniconda -or $Python3Miniforge -or $NodeUbuntu -or $NodeNvm -or $NodePnpm -or $NodeBun) {
         Install-DevelopmentTools -DistroName $DistroName -Username $Username
+    }
+
+    # Install shell if requested
+    if ($Shell) {
+        Install-Shell-Config -ShellName $Shell -Username $Username
+    }
+
+    # Install FFmpeg if requested
+    if ($Ffmpeg) {
+        Install-FFmpeg -DistroName $DistroName -Username $Username
     }
     
     # Test the installation
