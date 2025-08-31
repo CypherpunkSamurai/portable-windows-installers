@@ -477,12 +477,6 @@ nvm use --lts
         $installScript = @"
 # Install pnpm
 curl -fsSL https://get.pnpm.io/install.sh | sh -
-export PNPM_HOME="/home/$Username/.local/share/pnpm"
-case ":${PATH}:" in
-  *":${PNPM_HOME}:"*) ;;
-  *) export PATH="${PNPM_HOME}:${PATH}" ;;
-esac
-# pnpm install -g pnpm # This line is not needed as pnpm is already installed by the above script
 "@
         $installScript = $installScript -replace "`r`n", "`n"
         wsl -d $DistroName -u $Username sh -c $installScript
@@ -517,11 +511,10 @@ nvm use --lts
         $installScript = @"
 # Install bun
 curl -fsSL https://bun.sh/install | bash
-echo 'export BUN_INSTALL="/home/$Username/.bun"' >> ~/.bashrc
-echo 'export PATH="/home/$Username/.bun/bin:$PATH"' >> ~/.bashrc
 "@
         $installScript = $installScript -replace "`r`n", "`n"
-        wsl -d $DistroName -u $Username sh -c $installScript
+        wsl -d $DistroName -u $Username bash -c "$installScript"
+        
         Write-ColorOutput "To complete Bun setup, please start a new shell or run 'source ~/.bashrc'" "Yellow"
     }
  
