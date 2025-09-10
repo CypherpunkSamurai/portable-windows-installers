@@ -627,9 +627,10 @@ function Install-Shell-Config {
     if ($ShellName -eq "bash") {
         Write-ColorOutput "Installing Oh-My-Bash..." "Yellow"
         wsl -d $DistroName -u $Username apt install -y bash
-        wsl -d $DistroName -u $Username bash -c "bash -c $(wget https://raw.githubusercontent.com/ohmybash/oh-my-bash/master/tools/install.sh -O -)"
+        wsl -d $DistroName -u $Username bash -c "curl https://raw.githubusercontent.com/ohmybash/oh-my-bash/master/tools/install.sh -kL | bash"
         # OSH_THEME="random" or "simple" or "cypher"
-        wsl -d $DistroName -u $Username bash -c "echo 'export OSH_THEME=\"cypher\"' >> ~/.bashrc"
+        # here we use mix of strings to avoid issues with double quotes. we use ' first, then \" to escape the double quotes. use wsl -d win -u win bash -c 'tail ~/.bashrc' to verify
+        wsl -d win -u win bash -c 'echo "export OSH_THEME=\"cypher\"" >> ~/.bashrc'
         # Change Shell to Bash
         wsl -d $DistroName -u $Username bash -c 'chsh -s $(which bash)'
     }
@@ -637,8 +638,8 @@ function Install-Shell-Config {
         Write-ColorOutput "Installing Oh-My-Zsh..." "Yellow"
         wsl -d $DistroName -u $Username apt install -y zsh
         wsl -d $DistroName -u $Username "curl -fsSL https://install.ohmyz.sh | zsh"
-        # ZSH_THEME="random" or "simple" or "cypher"
-        wsl -d $DistroName -u $Username sh -c "echo 'export ZSH_THEME=\"cypher\"' >> ~/.zshrc"
+        # ZSH_THEME="random" or "simple" or "cypher" or "robbyrussell"
+        wsl -d win -u win bash -c 'echo "export ZSH_THEME=\"cypher\"" >> ~/.zshrc'
         # Change Shell to Zsh
         wsl -d $DistroName -u $Username sh -c 'chsh -s $(which zsh)'
     }
