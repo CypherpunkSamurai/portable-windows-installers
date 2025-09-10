@@ -798,14 +798,14 @@ function Main {
     # Configure WSL distribution
     Set-WSLConfiguration -DistroName $DistroName -Username $Username
 
-    # Install development tools if requested
-    if ($Python3Ubuntu -or $Python3Miniconda -or $Python3Miniforge -or $NodeUbuntu -or $NodeNvm -or $NodePnpm -or $NodeBun) {
-        Install-DevelopmentTools -DistroName $DistroName -Username $Username
-    }
-
     # Install shell if requested
     if ($Shell) {
         Install-Shell-Config -ShellName $Shell -Username $Username
+    }
+
+    # Install development tools if requested
+    if ($Python3Ubuntu -or $Python3Miniconda -or $Python3Miniforge -or $NodeUbuntu -or $NodeNvm -or $NodePnpm -or $NodeBun) {
+        Install-DevelopmentTools -DistroName $DistroName -Username $Username
     }
 
     # Install FFmpeg if requested
