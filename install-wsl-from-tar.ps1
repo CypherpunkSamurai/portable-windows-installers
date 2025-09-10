@@ -448,17 +448,17 @@ function Install-DevelopmentTools {
     elseif ($Python3Miniconda) {
         Write-ColorOutput "Installing Miniconda..." "Cyan"
         $installScript = @"
-mkdir -p ~/miniconda3
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
-bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
-rm ~/miniconda3/miniconda.sh
-~/miniconda3/bin/conda init bash
-~/miniconda3/bin/conda init zsh
-~/miniconda3/bin/conda init fish
-~/miniconda3/bin/conda config --set auto_activate_base false
+mkdir -p ~/.miniconda3
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/.miniconda3/miniconda.sh
+bash ~/miniconda3/miniconda.sh -b -u -p ~/.miniconda3
+rm ~/.miniconda3/miniconda.sh
+~/.miniconda3/bin/conda init bash
+~/.miniconda3/bin/conda init zsh
+~/.miniconda3/bin/conda init fish
+~/.miniconda3/bin/conda config --set auto_activate_base false
 source ~/.bashrc
-~/miniconda3/bin/conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
-~/miniconda3/bin/conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+~/.miniconda3/bin/conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+~/.miniconda3/bin/conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
 "@
         $installScript = $installScript -replace "`r`n", "`n"
         wsl -d $DistroName -u $Username sh -c $installScript
@@ -476,13 +476,14 @@ source ~/.bashrc
 
         # Initialize conda and configure it within a single shell session using Base64 encoding
         $condaConfigScriptContent = @"
-curl -Lf https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$wslUname-$wslUnameM.sh -o ~/miniforge3.sh
-bash ~/miniforge3.sh -b -p ~/condaforge
-rm ~/miniforge3.sh
-~/condaforge/bin/conda init bash
-~/condaforge/bin/conda init zsh
-~/condaforge/bin/conda init fish
-~/condaforge/bin/conda config --set auto_activate_base false
+mkdir -p ~/.condaforge
+curl -Lf https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$wslUname-$wslUnameM.sh -o ~/.condaforge/miniforge.sh
+bash ~/.condaforge/miniforge.sh -b -p ~/.condaforge
+rm ~/.condaforge/miniforge.sh
+~/.condaforge/bin/conda init bash
+~/.condaforge/bin/conda init zsh
+~/.condaforge/bin/conda init fish
+~/.condaforge/bin/conda config --set auto_activate_base false
 "@
         # Ensure Linux-style line endings before Base64 encoding
         $condaConfigScriptContent = $condaConfigScriptContent -replace "`r`n", "`n"
