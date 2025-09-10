@@ -624,32 +624,48 @@ function Install-Shell-Config {
         [string]$Username
     )
 
+    # Write
+    Write-ColorOutput "Configuring Shell..." "Yellow"
+
+    # terminate wsl distribution for /etc/wsl.conf to take effect
+    Write-ColorOutput "Terminating WSL distribution for /etc/wsl.conf to take effect..." "Yellow"
+    wsl --terminate $DistroName
+
+    # ensure github.com is accessible
+    Write-ColorOutput "Pinging github.com to ensure connectivity..." "Yellow"
+    $pingResult = wsl -d $DistroName -u $Username ping -c 2 github.com
+    if ($pingResult -match "0% packet loss") {
+        Write-ColorOutput "✓ github.com is reachable" "Green"
+    } else {
+        throw "Failed to ping github.com. Please check your network connection and try again."
+    }
+
     if ($ShellName -eq "bash") {
         Write-ColorOutput "Installing Oh-My-Bash..." "Yellow"
-        wsl -d $DistroName -u $Username apt install -y bash
+        wsl -d $DistroName -u $Username bash -c "sudo apt-get install -y bash curl wget git"
         wsl -d $DistroName -u $Username bash -c "curl https://raw.githubusercontent.com/ohmybash/oh-my-bash/master/tools/install.sh -kL | bash"
         # OSH_THEME="random" or "simple" or "cypher"
         # here we use mix of strings to avoid issues with double quotes. we use ' first, then \" to escape the double quotes. use wsl -d win -u win bash -c 'tail ~/.bashrc' to verify
-        wsl -d win -u win bash -c 'echo "export OSH_THEME=\"cypher\"" >> ~/.bashrc'
+        wsl -d $DistroName -u $Username bash -c 'echo "export OSH_THEME=\"cypher\"" >> ~/.bashrc'
         # Change Shell to Bash
-        wsl -d $DistroName -u $Username bash -c 'chsh -s $(which bash)'
+        wsl -d $DistroName -u $Username bash -c 'sudo chsh -s $(which bash) $USER'
     }
     elseif ($ShellName -eq "zsh") {
         Write-ColorOutput "Installing Oh-My-Zsh..." "Yellow"
-        wsl -d $DistroName -u $Username apt install -y zsh
-        wsl -d $DistroName -u $Username "curl -fsSL https://install.ohmyz.sh | zsh"
+        wsl -d $DistroName -u $Username bash -c "sudo apt-get install -y zsh curl wget git"
+        wsl -d $DistroName -u $Username "curl -fsSL https://install.ohmyz.sh -kL | zsh"
         # ZSH_THEME="random" or "simple" or "cypher" or "robbyrussell"
-        wsl -d win -u win bash -c 'echo "export ZSH_THEME=\"cypher\"" >> ~/.zshrc'
+        wsl -d $DistroName -u $Username bash -c 'echo "export ZSH_THEME=\"cypher\"" >> ~/.zshrc'
         # Change Shell to Zsh
-        wsl -d $DistroName -u $Username sh -c 'chsh -s $(which zsh)'
+        wsl -d $DistroName -u $Username sh -c 'sudo chsh -s $(which zsh) $USER'
     }
     elseif ($ShellName -eq "fish") {
         Write-ColorOutput "Installing Fish..." "Yellow"
-        wsl -d $DistroName -u $Username apt install -y fish
+        wsl -d $DistroName -u $Username bash -c "sudo apt-get install -y fish curl wget git"
         # Install Oh-My-Fish
-        wsl -d $DistroName -u $Username fish -c "curl https://raw.githubusercontent.com/oh-my-fish/oh-my-fish/master/bin/install | fish"
+        wsl -d $DistroName -u $Username fish -c "curl https://raw.githubusercontent.com/oh-my-fish/oh-my-fish/master/bin/install -kL | fish"
         # Change Shell to Fish
-        wsl -d $DistroName -u $Username sh -c 'chsh -s $(which fish)'
+        wsl -d $DistroName -u $Username sh -c 'sudo chsh -s $(which fish) $USER'
     }
     else {
         throw "Invalid shell name: $ShellName"
