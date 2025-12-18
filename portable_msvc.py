@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+r"""
 # Portable MSVC without Visual Studio Community Installer
 - https://github.com/jonathanpeppers/boots
 - https://github.com/tgbender/portablemsvc
@@ -42,12 +42,12 @@ echo.
 if %ERRORLEVEL% EQU 0 (
     echo Build succeeded!
     echo Executable created: build\bt_radios.exe
-    
+
     echo.
     echo Running the program...
     echo.
     bt_radios.exe
-    
+
     if %ERRORLEVEL% EQU 0 (
         echo.
         echo Program executed successfully!
@@ -77,14 +77,28 @@ import subprocess
 import urllib.error
 import urllib.request
 from pathlib import Path
+import platform
 
 # Configuration
 OUTPUT_DIR = Path("msvc")
 DOWNLOADS_DIR = Path("downloads")
 
-DEFAULT_HOST = "x64"
+
+def detect_host():
+    """Detect host architecture"""
+    machine = platform.machine().lower()
+    if machine == "amd64":
+        return "x64"
+    elif machine == "arm64":
+        return "arm64"
+    elif machine == "x86":
+        return "x86"
+    return "x64"
+
+
+DEFAULT_HOST = detect_host()
 ALL_HOSTS = ["x64", "x86", "arm64"]
-DEFAULT_TARGET = "x64"
+DEFAULT_TARGET = detect_host()
 ALL_TARGETS = ["x64", "x86", "arm", "arm64"]
 
 MANIFEST_URL = "https://aka.ms/vs/17/release/channel"
@@ -158,7 +172,7 @@ class MSIParser:
             index = msi_data.find(b".cab", index + 4)
             if index < 0:
                 break
-            cab_name = msi_data[index-32:index+4].decode("ascii")
+            cab_name = msi_data[index - 32 : index + 4].decode("ascii")
             cab_files.append(cab_name)
 
         return cab_files
@@ -172,7 +186,7 @@ class VSInstaller:
 
         # Validate arguments
         self.host = args.host
-        self.targets = args.target.split(',')
+        self.targets = args.target.split(",")
         self._validate_targets()
 
     def _validate_targets(self):
@@ -193,13 +207,14 @@ class VSInstaller:
             return self.downloader.simple_download(self._get_manifest_url())
         except urllib.error.URLError as err:
             import ssl
+
             if isinstance(err.args[0], ssl.SSLCertVerificationError):
                 print("ERROR: SSL certificate verification error")
                 try:
                     import certifi
+
                     print("NOTE: Retrying with certifi certificates")
-                    ssl_context = ssl.create_default_context(
-                        cafile=certifi.where())
+                    ssl_context = ssl.create_default_context(cafile=certifi.where())
                     return self.downloader.simple_download(self._get_manifest_url())
                 except ModuleNotFoundError:
                     print("ERROR: Please install 'certifi' package")
@@ -218,13 +233,14 @@ class VSInstaller:
 
     def get_vs_manifest(self, main_manifest):
         """Download VS-specific manifest"""
-        item_name = ("Microsoft.VisualStudio.Manifests.VisualStudioPreview"
-                     if self.args.preview else
-                     "Microsoft.VisualStudio.Manifests.VisualStudio")
+        item_name = (
+            "Microsoft.VisualStudio.Manifests.VisualStudioPreview"
+            if self.args.preview
+            else "Microsoft.VisualStudio.Manifests.VisualStudio"
+        )
 
         vs_item = self._find_first_item(
-            main_manifest["channelItems"],
-            lambda x: x["id"] == item_name
+            main_manifest["channelItems"], lambda x: x["id"] == item_name
         )
         payload_url = vs_item["payloads"][0]["url"]
 
@@ -243,15 +259,19 @@ class VSInstaller:
 
         for package_id, package_list in packages.items():
             # Parse MSVC versions
-            if (package_id.startswith("microsoft.vc.") and
-                    package_id.endswith(".tools.hostx64.targetx64.base")):
+            if package_id.startswith("microsoft.vc.") and package_id.endswith(
+                ".tools.hostx64.targetx64.base"
+            ):
                 version = ".".join(package_id.split(".")[2:4])
                 if version[0].isnumeric():
                     msvc_versions[version] = package_id
 
             # Parse SDK versions
-            elif (package_id.startswith("microsoft.visualstudio.component.windows10sdk.") or
-                  package_id.startswith("microsoft.visualstudio.component.windows11sdk.")):
+            elif package_id.startswith(
+                "microsoft.visualstudio.component.windows10sdk."
+            ) or package_id.startswith(
+                "microsoft.visualstudio.component.windows11sdk."
+            ):
                 version = package_id.split(".")[-1]
                 if version.isnumeric():
                     sdk_versions[version] = package_id
@@ -262,8 +282,7 @@ class VSInstaller:
         """Select MSVC and SDK versions to use"""
         if self.args.show_versions:
             print("MSVC versions:", " ".join(sorted(msvc_versions.keys())))
-            print("Windows SDK versions:", " ".join(
-                sorted(sdk_versions.keys())))
+            print("Windows SDK versions:", " ".join(sorted(sdk_versions.keys())))
             sys.exit(0)
 
         # Select MSVC version
@@ -289,16 +308,14 @@ class VSInstaller:
 
         tools = self._find_first_item(
             main_manifest["channelItems"],
-            lambda x: x["id"] == "Microsoft.VisualStudio.Product.BuildTools"
+            lambda x: x["id"] == "Microsoft.VisualStudio.Product.BuildTools",
         )
         resource = self._find_first_item(
-            tools["localizedResources"],
-            lambda x: x["language"] == "en-us"
+            tools["localizedResources"], lambda x: x["language"] == "en-us"
         )
         license_url = resource["license"]
 
-        response = input(
-            f"Accept Visual Studio license at {license_url} [Y/N]? ")
+        response = input(f"Accept Visual Studio license at {license_url} [Y/N]? ")
         if not response or response[0].lower() != "y":
             sys.exit(0)
 
@@ -322,30 +339,32 @@ class VSInstaller:
 
         # Target-specific packages
         for target in self.targets:
-            msvc_packages.extend([
-                f"microsoft.vc.{msvc_version}.tools.host{self.host}.target{target}.base",
-                f"microsoft.vc.{msvc_version}.tools.host{self.host}.target{target}.res.base",
-                f"microsoft.vc.{msvc_version}.crt.{target}.desktop.base",
-                f"microsoft.vc.{msvc_version}.crt.{target}.store.base",
-                f"microsoft.vc.{msvc_version}.premium.tools.host{self.host}.target{target}.base",
-                f"microsoft.vc.{msvc_version}.pgo.{target}.base",
-            ])
+            msvc_packages.extend(
+                [
+                    f"microsoft.vc.{msvc_version}.tools.host{self.host}.target{target}.base",
+                    f"microsoft.vc.{msvc_version}.tools.host{self.host}.target{target}.res.base",
+                    f"microsoft.vc.{msvc_version}.crt.{target}.desktop.base",
+                    f"microsoft.vc.{msvc_version}.crt.{target}.store.base",
+                    f"microsoft.vc.{msvc_version}.premium.tools.host{self.host}.target{target}.base",
+                    f"microsoft.vc.{msvc_version}.pgo.{target}.base",
+                ]
+            )
 
             # ASAN packages (only for x86/x64)
             if target in ["x86", "x64"]:
-                msvc_packages.append(
-                    f"microsoft.vc.{msvc_version}.asan.{target}.base")
+                msvc_packages.append(f"microsoft.vc.{msvc_version}.asan.{target}.base")
 
             # Redistributable packages
             redist_suffix = ".onecore.desktop" if target == "arm" else ""
-            redist_pkg = f"microsoft.vc.{msvc_version}.crt.redist.{target}{redist_suffix}.base"
+            redist_pkg = (
+                f"microsoft.vc.{msvc_version}.crt.redist.{target}{redist_suffix}.base"
+            )
 
             if redist_pkg not in packages:
                 redist_name = f"microsoft.visualcpp.crt.redist.{target}{redist_suffix}"
                 redist = self._find_first_item(packages[redist_name])
                 redist_pkg = self._find_first_item(
-                    redist["dependencies"],
-                    lambda dep: dep.endswith(".base")
+                    redist["dependencies"], lambda dep: dep.endswith(".base")
                 ).lower()
 
             msvc_packages.append(redist_pkg)
@@ -357,8 +376,7 @@ class VSInstaller:
                 continue
 
             package = self._find_first_item(
-                packages[package_name],
-                lambda p: p.get("language") in (None, "en-US")
+                packages[package_name], lambda p: p.get("language") in (None, "en-US")
             )
 
             for payload in package["payloads"]:
@@ -371,10 +389,10 @@ class VSInstaller:
                 with zipfile.ZipFile(DOWNLOADS_DIR / filename) as zip_file:
                     for name in zip_file.namelist():
                         if name.startswith("Contents/"):
-                            output_path = OUTPUT_DIR / \
-                                Path(name).relative_to("Contents")
-                            output_path.parent.mkdir(
-                                parents=True, exist_ok=True)
+                            output_path = OUTPUT_DIR / Path(name).relative_to(
+                                "Contents"
+                            )
+                            output_path.parent.mkdir(parents=True, exist_ok=True)
                             output_path.write_bytes(zip_file.read(name))
 
     def download_sdk(self, packages, sdk_package_id):
@@ -392,20 +410,22 @@ class VSInstaller:
 
         # Add target-specific packages
         for target in ALL_TARGETS:
-            sdk_packages.extend([
-                f"Windows SDK Desktop Headers {target}-x86_en-us.msi",
-                f"Windows SDK OnecoreUap Headers {target}-x86_en-us.msi",
-            ])
+            sdk_packages.extend(
+                [
+                    f"Windows SDK Desktop Headers {target}-x86_en-us.msi",
+                    f"Windows SDK OnecoreUap Headers {target}-x86_en-us.msi",
+                ]
+            )
 
         for target in self.targets:
-            sdk_packages.append(
-                f"Windows SDK Desktop Libs {target}-x86_en-us.msi")
+            sdk_packages.append(f"Windows SDK Desktop Libs {target}-x86_en-us.msi")
 
         # Download and install SDK
         with tempfile.TemporaryDirectory(dir=DOWNLOADS_DIR) as temp_dir:
             sdk_package = packages[sdk_package_id][0]
-            sdk_package = packages[self._find_first_item(
-                sdk_package["dependencies"]).lower()][0]
+            sdk_package = packages[
+                self._find_first_item(sdk_package["dependencies"]).lower()
+            ][0]
 
             msi_files = []
             cab_files = []
@@ -414,7 +434,7 @@ class VSInstaller:
             for package_name in sorted(sdk_packages):
                 payload = self._find_first_item(
                     sdk_package["payloads"],
-                    lambda p: p["fileName"] == f"Installers\\{package_name}"
+                    lambda p: p["fileName"] == f"Installers\\{package_name}",
                 )
                 if payload is None:
                     continue
@@ -429,7 +449,7 @@ class VSInstaller:
             for cab_name in cab_files:
                 payload = self._find_first_item(
                     sdk_package["payloads"],
-                    lambda p: p["fileName"] == f"Installers\\{cab_name}"
+                    lambda p: p["fileName"] == f"Installers\\{cab_name}",
                 )
                 self.downloader.download_with_progress(
                     payload["url"], payload["sha256"], cab_name
@@ -439,10 +459,16 @@ class VSInstaller:
 
             # Install MSI files
             for msi_file in msi_files:
-                subprocess.check_call([
-                    'msiexec.exe', '/a', str(msi_file), '/quiet', '/qn',
-                    f'TARGETDIR={OUTPUT_DIR.resolve()}'
-                ])
+                subprocess.check_call(
+                    [
+                        "msiexec.exe",
+                        "/a",
+                        str(msi_file),
+                        "/quiet",
+                        "/qn",
+                        f"TARGETDIR={OUTPUT_DIR.resolve()}",
+                    ]
+                )
                 (OUTPUT_DIR / msi_file.name).unlink()
 
     def setup_environment(self):
@@ -470,8 +496,13 @@ class VSInstaller:
 
         for target in self.targets:
             for dll_file in (source_dir / target).glob("**/*.dll"):
-                destination = (OUTPUT_DIR / "VC/Tools/MSVC" / msvc_version /
-                               f"bin/Host{self.host}" / target)
+                destination = (
+                    OUTPUT_DIR
+                    / "VC/Tools/MSVC"
+                    / msvc_version
+                    / f"bin/Host{self.host}"
+                    / target
+                )
                 dll_file.replace(destination / dll_file.name)
 
         shutil.rmtree(redist_dir)
@@ -485,13 +516,13 @@ class VSInstaller:
             "arm64": "arm64/msdia140.dll",
         }
 
-        destination_base = OUTPUT_DIR / "VC/Tools/MSVC" / \
-            msvc_version / f"bin/Host{self.host}"
+        destination_base = (
+            OUTPUT_DIR / "VC/Tools/MSVC" / msvc_version / f"bin/Host{self.host}"
+        )
         source_file = OUTPUT_DIR / "DIA%20SDK/bin" / msdia_files[self.host]
 
         for target in self.targets:
-            shutil.copyfile(source_file, destination_base /
-                            target / source_file.name)
+            shutil.copyfile(source_file, destination_base / target / source_file.name)
 
         shutil.rmtree(OUTPUT_DIR / "DIA%20SDK")
 
@@ -534,20 +565,32 @@ class VSInstaller:
         for arch in ALL_TARGETS:
             if arch not in self.targets:
                 shutil.rmtree(
-                    OUTPUT_DIR / f"Windows Kits/10/Lib/{sdk_version}/ucrt/{arch}", ignore_errors=True)
+                    OUTPUT_DIR / f"Windows Kits/10/Lib/{sdk_version}/ucrt/{arch}",
+                    ignore_errors=True,
+                )
                 shutil.rmtree(
-                    OUTPUT_DIR / f"Windows Kits/10/Lib/{sdk_version}/um/{arch}", ignore_errors=True)
+                    OUTPUT_DIR / f"Windows Kits/10/Lib/{sdk_version}/um/{arch}",
+                    ignore_errors=True,
+                )
 
             if arch != self.host:
                 shutil.rmtree(
-                    OUTPUT_DIR / f"VC/Tools/MSVC/{msvc_version}/bin/Host{arch}", ignore_errors=True)
+                    OUTPUT_DIR / f"VC/Tools/MSVC/{msvc_version}/bin/Host{arch}",
+                    ignore_errors=True,
+                )
                 shutil.rmtree(
-                    OUTPUT_DIR / f"Windows Kits/10/bin/{sdk_version}/{arch}", ignore_errors=True)
+                    OUTPUT_DIR / f"Windows Kits/10/bin/{sdk_version}/{arch}",
+                    ignore_errors=True,
+                )
 
         # Remove telemetry executable
         for target in self.targets:
-            telemetry_exe = (OUTPUT_DIR / "VC/Tools/MSVC" / msvc_version /
-                             f"bin/Host{self.host}/{target}/vctip.exe")
+            telemetry_exe = (
+                OUTPUT_DIR
+                / "VC/Tools/MSVC"
+                / msvc_version
+                / f"bin/Host{self.host}/{target}/vctip.exe"
+            )
             telemetry_exe.unlink(missing_ok=True)
 
     def _create_build_files(self, msvc_version, sdk_version):
@@ -623,6 +666,12 @@ Write-Host "Visual Studio 2022 {target} environment configured" -ForegroundColor
 
     def run(self):
         """Main execution flow"""
+        print(f"Host Architecture: {self.host}")
+        print(f"Target Architectures: {', '.join(self.targets)}")
+        print(f"Installation Directory: {OUTPUT_DIR.resolve()}")
+        print("Note: License agreement is automatically accepted.")
+        print("-" * 40)
+
         print("Starting Visual Studio installation...")
 
         # Get manifests
@@ -631,9 +680,11 @@ Write-Host "Visual Studio 2022 {target} environment configured" -ForegroundColor
 
         # Parse versions
         packages, msvc_versions, sdk_versions = self.parse_available_versions(
-            vs_manifest)
+            vs_manifest
+        )
         msvc_ver, sdk_ver, msvc_pid, sdk_pid = self.select_versions(
-            msvc_versions, sdk_versions)
+            msvc_versions, sdk_versions
+        )
 
         print(f"Downloading MSVC v{msvc_ver} and Windows SDK v{sdk_ver}")
 
@@ -683,21 +734,31 @@ def clean_directories():
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(description="Portable MSVC installer")
-    parser.add_argument("--show-versions", action="store_true",
-                        help="Show available MSVC and Windows SDK versions")
-    parser.add_argument("--accept-license", action="store_true",
-                        help="Automatically accept license")
-    parser.add_argument("--msvc-version", help="Get specific MSVC version")
     parser.add_argument(
-        "--sdk-version", help="Get specific Windows SDK version")
-    parser.add_argument("--preview", action="store_true",
-                        help="Use preview channel")
-    parser.add_argument("--target", default=DEFAULT_TARGET,
-                        help=f"Target architectures, comma separated ({','.join(ALL_TARGETS)})")
-    parser.add_argument("--host", default=DEFAULT_HOST, choices=ALL_HOSTS,
-                        help="Host architecture")
-    parser.add_argument("--clean", action="store_true",
-                        help="Clean downloads and msvc folders")
+        "--show-versions",
+        action="store_true",
+        help="Show available MSVC and Windows SDK versions",
+    )
+    parser.add_argument(
+        "--accept-license",
+        action="store_true",
+        default=True,
+        help="Automatically accept license (Default: True)",
+    )
+    parser.add_argument("--msvc-version", help="Get specific MSVC version")
+    parser.add_argument("--sdk-version", help="Get specific Windows SDK version")
+    parser.add_argument("--preview", action="store_true", help="Use preview channel")
+    parser.add_argument(
+        "--target",
+        default=DEFAULT_TARGET,
+        help=f"Target architectures, comma separated ({','.join(ALL_TARGETS)})",
+    )
+    parser.add_argument(
+        "--host", default=DEFAULT_HOST, choices=ALL_HOSTS, help="Host architecture"
+    )
+    parser.add_argument(
+        "--clean", action="store_true", help="Clean downloads and msvc folders"
+    )
 
     args = parser.parse_args()
 
