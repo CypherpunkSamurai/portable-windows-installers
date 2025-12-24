@@ -164,6 +164,10 @@ class Color:
         return cls._wrap(cls.CYAN, text)
 
     @classmethod
+    def magenta(cls, text: str) -> str:
+        return cls._wrap(cls.MAGENTA, text)
+
+    @classmethod
     def bold(cls, text: str) -> str:
         return cls._wrap(cls.BOLD, text)
 
@@ -290,9 +294,9 @@ class DownloadManager:
                 f"\r{Color.cyan('●')} {filename} ... {Color.green('OK')} {Color.dim('(cached)')}"
             )
         elif status == "done":
-            print(f"\r{Color.green('✓')} {filename} ... {Color.success('100%')}")
+            print(f"\r{Color.green('[OK]')} {filename} ... {Color.success('100%')}")
         elif status == "error":
-            print(f"\r{Color.red('✗')} {filename} ... {Color.error('FAILED')}")
+            print(f"\r{Color.red('[ERR]')} {filename} ... {Color.error('FAILED')}")
         elif status == "retry":
             print(
                 f"\r{Color.yellow('⟳')} {filename} ... {Color.warning('retrying...')}"
