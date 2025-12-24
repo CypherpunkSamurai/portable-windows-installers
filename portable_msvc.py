@@ -236,7 +236,7 @@ total_download = 0
 
 
 class DownloadManager:
-    """Optimized download manager with streaming hash and parallel downloads."""
+    """Optimized download manager with streaming hash, colors, and network resilience."""
 
     # 64KB chunks - matches WinINet's optimal buffer size
     CHUNK_SIZE = 64 * 1024
@@ -245,6 +245,7 @@ class DownloadManager:
         self.total_bytes = 0
         self.max_workers = max_workers
         self._session = None
+        Color.init()  # Initialize color support
 
     def _get_session(self):
         """Get or create a requests session with connection pooling."""
@@ -259,7 +260,12 @@ class DownloadManager:
 
             session = requests.Session()
             # Configure connection pooling and retries
-            retry = Retry(total=3, backoff_factor=0.5)
+            retry = Retry(
+                total=MAX_RETRIES,
+                backoff_factor=RETRY_BASE_DELAY,
+                status_forcelist=[429, 500, 502, 503, 504],
+                allowed_methods=["GET", "HEAD"],
+            )
             adapter = HTTPAdapter(
                 pool_connections=10, pool_maxsize=10, max_retries=retry
             )
@@ -270,16 +276,94 @@ class DownloadManager:
         except ImportError:
             return None
 
+    def _log_progress(
+        self,
+        filename: str,
+        progress: int = None,
+        size_kb: int = None,
+        status: str = None,
+        resume_bytes: int = 0,
+    ):
+        """Print colorized progress."""
+        if status == "cached":
+            print(
+                f"\r{Color.cyan('●')} {filename} ... {Color.green('OK')} {Color.dim('(cached)')}"
+            )
+        elif status == "done":
+            print(f"\r{Color.green('✓')} {filename} ... {Color.success('100%')}")
+        elif status == "error":
+            print(f"\r{Color.red('✗')} {filename} ... {Color.error('FAILED')}")
+        elif status == "retry":
+            print(
+                f"\r{Color.yellow('⟳')} {filename} ... {Color.warning('retrying...')}"
+            )
+        elif status == "resuming":
+            resume_kb = resume_bytes // 1024
+            print(
+                f"\r{Color.magenta('↻')} {filename} ... {Color.info(f'resuming from {resume_kb}KB')}",
+                end="",
+                flush=True,
+            )
+        elif progress is not None:
+            bar_width = 20
+            filled = int(bar_width * progress / 100)
+            bar = Color.green("█" * filled) + Color.dim("░" * (bar_width - filled))
+            print(
+                f"\r{Color.blue('↓')} {filename} [{bar}] {progress}%",
+                end="",
+                flush=True,
+            )
+        elif size_kb is not None:
+            print(
+                f"\r{Color.blue('↓')} {filename} ... {Color.cyan(f'{size_kb}KB')}",
+                end="",
+                flush=True,
+            )
+
+    def _retry_with_backoff(self, func, filename: str, max_retries: int = None):
+        """Execute function with exponential backoff retry."""
+        max_retries = max_retries or MAX_RETRIES
+        last_error = None
+
+        for attempt in range(max_retries):
+            try:
+                return func()
+            except (
+                urllib.error.URLError,
+                urllib.error.HTTPError,
+                OSError,
+                ConnectionError,
+            ) as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    delay = min(RETRY_BASE_DELAY * (2**attempt), RETRY_MAX_DELAY)
+                    self._log_progress(filename, status="retry")
+                    print(
+                        f" {Color.dim(f'(attempt {attempt + 1}/{max_retries}, waiting {delay:.1f}s)')}"
+                    )
+                    time.sleep(delay)
+                else:
+                    self._log_progress(filename, status="error")
+                    print(f" {Color.red(str(e))}")
+
+        raise last_error
+
     def simple_download(self, url):
-        """Download content from URL"""
-        session = self._get_session()
-        if session:
-            response = session.get(url, timeout=30)
-            response.raise_for_status()
-            return response.content
-        else:
-            with urllib.request.urlopen(url, context=ssl_context) as response:
-                return response.read()
+        """Download content from URL with retry support."""
+
+        def _do_download():
+            session = self._get_session()
+            if session:
+                response = session.get(url, timeout=CONNECTION_TIMEOUT)
+                response.raise_for_status()
+                return response.content
+            else:
+                with urllib.request.urlopen(
+                    url, context=ssl_context, timeout=CONNECTION_TIMEOUT
+                ) as response:
+                    return response.read()
+
+        return self._retry_with_backoff(_do_download, "manifest")
 
     def _hash_file_mmap(self, file_path: Path) -> str:
         """Calculate SHA256 hash using memory-mapped file (zero-copy)."""
@@ -318,79 +402,187 @@ class DownloadManager:
 
         return actual_hash == expected_hash.lower()
 
+    def _download_with_requests(
+        self, session, url: str, file_path: Path, filename: str, resume_from: int = 0
+    ):
+        """Download using requests library with streaming and resume support."""
+        headers = {}
+        if resume_from > 0:
+            headers["Range"] = f"bytes={resume_from}-"
+            self._log_progress(filename, status="resuming", resume_bytes=resume_from)
+
+        response = session.get(
+            url,
+            stream=True,
+            timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
+            headers=headers,
+        )
+
+        # Check if server supports range requests
+        is_partial = response.status_code == 206
+        if resume_from > 0 and not is_partial:
+            # Server doesn't support resume, start fresh
+            resume_from = 0
+            response = session.get(
+                url, stream=True, timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT)
+            )
+
+        response.raise_for_status()
+
+        # Calculate total size
+        content_length = int(response.headers.get("Content-Length", 0))
+        total_size = resume_from + content_length if is_partial else content_length
+
+        hasher = hashlib.sha256()
+        downloaded = resume_from
+
+        # If resuming, hash the existing partial file first
+        if resume_from > 0 and file_path.exists():
+            with open(file_path, "rb") as f:
+                for chunk in iter(lambda: f.read(self.CHUNK_SIZE), b""):
+                    hasher.update(chunk)
+
+        # Open in append mode if resuming, otherwise write mode
+        mode = "ab" if resume_from > 0 else "wb"
+        with file_path.open(mode) as file:
+            for chunk in response.iter_content(chunk_size=self.CHUNK_SIZE):
+                if chunk:
+                    file.write(chunk)
+                    hasher.update(chunk)
+                    downloaded += len(chunk)
+
+                    if total_size > 0:
+                        progress = downloaded * 100 // total_size
+                        self._log_progress(filename, progress=progress)
+                    else:
+                        self._log_progress(filename, size_kb=downloaded // 1024)
+
+        return hasher.hexdigest(), downloaded
+
+    def _download_with_urllib(
+        self, url: str, file_path: Path, filename: str, resume_from: int = 0
+    ):
+        """Download using urllib with optimizations and resume support."""
+        request = urllib.request.Request(url)
+
+        if resume_from > 0:
+            request.add_header("Range", f"bytes={resume_from}-")
+            self._log_progress(filename, status="resuming", resume_bytes=resume_from)
+
+        with urllib.request.urlopen(
+            request, context=ssl_context, timeout=READ_TIMEOUT
+        ) as response:
+            # Check if server supports range requests (206 Partial Content)
+            is_partial = response.status == 206
+
+            # If we wanted to resume but server doesn't support it, start fresh
+            if resume_from > 0 and not is_partial:
+                resume_from = 0
+                # Re-request without Range header
+                request = urllib.request.Request(url)
+                response = urllib.request.urlopen(
+                    request, context=ssl_context, timeout=READ_TIMEOUT
+                )
+
+            content_length = int(response.headers.get("Content-Length", 0))
+            total_size = resume_from + content_length if is_partial else content_length
+
+            hasher = hashlib.sha256()
+            downloaded = resume_from
+
+            # If resuming, hash the existing partial file first
+            if resume_from > 0 and file_path.exists():
+                with open(file_path, "rb") as f:
+                    for chunk in iter(lambda: f.read(self.CHUNK_SIZE), b""):
+                        hasher.update(chunk)
+
+            # Open in append mode if resuming, otherwise write mode
+            mode = "ab" if resume_from > 0 else "wb"
+            with file_path.open(mode) as file:
+                while True:
+                    chunk = response.read(self.CHUNK_SIZE)
+                    if not chunk:
+                        break
+
+                    file.write(chunk)
+                    hasher.update(chunk)
+                    downloaded += len(chunk)
+
+                    if total_size > 0:
+                        progress = downloaded * 100 // total_size
+                        self._log_progress(filename, progress=progress)
+                    else:
+                        self._log_progress(filename, size_kb=downloaded // 1024)
+
+            return hasher.hexdigest(), downloaded
+
+    def _get_partial_size(self, file_path: Path) -> int:
+        """Get size of existing partial file, or 0 if not exists."""
+        if file_path.exists():
+            try:
+                return file_path.stat().st_size
+            except OSError:
+                return 0
+        return 0
+
     def download_with_progress(self, url, expected_hash, filename):
-        """Download file with streaming hash verification (no double buffering)."""
+        """Download file with streaming hash verification, network resilience, and resume support."""
         file_path = DOWNLOADS_DIR / filename
 
-        # Check if file already exists and is valid
+        # Check if file already exists and is valid (complete download)
         if self._validate_cached_file(file_path, expected_hash):
-            print(f"\r{filename} ... OK (cached)")
+            self._log_progress(filename, status="cached")
             return file_path.read_bytes()
 
-        # Streaming download with inline hash calculation
-        hasher = hashlib.sha256()
-        downloaded = 0
-        total_size = 0
+        # Check for partial file to resume
+        partial_size = self._get_partial_size(file_path)
 
-        session = self._get_session()
+        def _do_download():
+            nonlocal partial_size
+            session = self._get_session()
+            try:
+                if session:
+                    return self._download_with_requests(
+                        session, url, file_path, filename, resume_from=partial_size
+                    )
+                else:
+                    return self._download_with_urllib(
+                        url, file_path, filename, resume_from=partial_size
+                    )
+            except Exception:  # noqa: BLE001
+                # If resume failed, try fresh download
+                if partial_size > 0:
+                    self._log_progress(filename, status="retry")
+                    print(f" {Color.dim('(resume failed, restarting...)')}")
+                    partial_size = 0
+                    file_path.unlink(missing_ok=True)
+                    if session:
+                        return self._download_with_requests(
+                            session, url, file_path, filename, resume_from=0
+                        )
+                    else:
+                        return self._download_with_urllib(
+                            url, file_path, filename, resume_from=0
+                        )
+                raise
 
-        if session:
-            # Use requests with streaming (connection pooling)
-            response = session.get(url, stream=True, timeout=60)
-            response.raise_for_status()
-            total_size = int(response.headers.get("Content-Length", 0))
+        # Download with retry logic
+        try:
+            actual_hash, downloaded = self._retry_with_backoff(_do_download, filename)
+        except Exception as e:
+            file_path.unlink(missing_ok=True)
+            print(f"\n{Color.error('ERROR:')} Failed to download {filename}: {e}")
+            sys.exit(1)
 
-            with file_path.open("wb") as file:
-                for chunk in response.iter_content(chunk_size=self.CHUNK_SIZE):
-                    if chunk:
-                        file.write(chunk)
-                        hasher.update(chunk)  # Hash while writing (single pass)
-                        downloaded += len(chunk)
-
-                        if total_size > 0:
-                            progress = downloaded * 100 // total_size
-                            print(f"\r{filename} ... {progress}%", end="", flush=True)
-                        else:
-                            print(
-                                f"\r{filename} ... {downloaded // 1024}KB",
-                                end="",
-                                flush=True,
-                            )
-        else:
-            # Fallback to urllib with optimizations
-            with urllib.request.urlopen(
-                url, context=ssl_context, timeout=60
-            ) as response:
-                total_size = int(response.headers.get("Content-Length", 0))
-
-                with file_path.open("wb") as file:
-                    while True:
-                        chunk = response.read(self.CHUNK_SIZE)
-                        if not chunk:
-                            break
-
-                        file.write(chunk)
-                        hasher.update(chunk)  # Hash while writing (single pass)
-                        downloaded += len(chunk)
-
-                        if total_size > 0:
-                            progress = downloaded * 100 // total_size
-                            print(f"\r{filename} ... {progress}%", end="", flush=True)
-                        else:
-                            print(
-                                f"\r{filename} ... {downloaded // 1024}KB",
-                                end="",
-                                flush=True,
-                            )
-
-        print()  # New line after progress
-
-        # Verify hash (already calculated during download - no re-read needed!)
-        actual_hash = hasher.hexdigest()
+        # Verify hash
         if expected_hash.lower() != actual_hash:
-            file_path.unlink(missing_ok=True)  # Remove corrupted file
-            sys.exit(f"Hash mismatch for {filename}")
+            file_path.unlink(missing_ok=True)
+            print(f"\n{Color.error('ERROR:')} Hash mismatch for {filename}")
+            print(f"  Expected: {Color.dim(expected_hash.lower())}")
+            print(f"  Got:      {Color.dim(actual_hash)}")
+            sys.exit(1)
 
+        self._log_progress(filename, status="done")
         self.total_bytes += downloaded
         return file_path.read_bytes()
 
