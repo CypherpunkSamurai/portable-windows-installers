@@ -348,22 +348,62 @@ class DownloadManager:
 
         raise last_error
 
-    def simple_download(self, url):
-        """Download content from URL with retry support."""
+    def simple_download(
+        self, url, cache_path: Path = None, display_name: str = "manifest"
+    ):
+        """Download content from URL with retry support and optional disk caching."""
 
         def _do_download():
             session = self._get_session()
+
+            if cache_path and cache_path.exists():
+                # Check if cached file is recent (< 1 hour old)
+                cache_age = time.time() - cache_path.stat().st_mtime
+                if cache_age < 3600:  # 1 hour cache validity
+                    self._log_progress(display_name, status="cached")
+                    return cache_path.read_bytes()
+
+            self._log_progress(display_name, size_kb=0)
+
             if session:
-                response = session.get(url, timeout=CONNECTION_TIMEOUT)
+                response = session.get(url, stream=True, timeout=CONNECTION_TIMEOUT)
                 response.raise_for_status()
-                return response.content
+
+                # Stream to memory with progress
+                chunks = []
+                downloaded = 0
+                for chunk in response.iter_content(chunk_size=self.CHUNK_SIZE):
+                    if chunk:
+                        chunks.append(chunk)
+                        downloaded += len(chunk)
+                        self._log_progress(display_name, size_kb=downloaded // 1024)
+
+                data = b"".join(chunks)
             else:
                 with urllib.request.urlopen(
                     url, context=ssl_context, timeout=CONNECTION_TIMEOUT
                 ) as response:
-                    return response.read()
+                    chunks = []
+                    downloaded = 0
+                    while True:
+                        chunk = response.read(self.CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        chunks.append(chunk)
+                        downloaded += len(chunk)
+                        self._log_progress(display_name, size_kb=downloaded // 1024)
 
-        return self._retry_with_backoff(_do_download, "manifest")
+                    data = b"".join(chunks)
+
+            # Cache to disk if path provided
+            if cache_path:
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                cache_path.write_bytes(data)
+
+            print()  # New line after progress
+            return data
+
+        return self._retry_with_backoff(_do_download, display_name)
 
     def _hash_file_mmap(self, file_path: Path) -> str:
         """Calculate SHA256 hash using memory-mapped file (zero-copy)."""
@@ -626,24 +666,36 @@ class VSInstaller:
         return next((item for item in items if condition(item)), None)
 
     def setup_ssl_context(self):
-        """Setup SSL context for downloads"""
+        """Setup SSL context for downloads and fetch channel manifest"""
         global ssl_context
 
+        # Cache the channel manifest
+        cache_name = "channel_preview.json" if self.args.preview else "channel.json"
+        cache_path = DOWNLOADS_DIR / cache_name
+
         try:
-            return self.downloader.simple_download(self._get_manifest_url())
+            return self.downloader.simple_download(
+                self._get_manifest_url(),
+                cache_path=cache_path,
+                display_name="VS Channel Manifest",
+            )
         except urllib.error.URLError as err:
             import ssl
 
             if isinstance(err.args[0], ssl.SSLCertVerificationError):
-                print("ERROR: SSL certificate verification error")
+                print(Color.error("ERROR:"), "SSL certificate verification error")
                 try:
                     import certifi
 
-                    print("NOTE: Retrying with certifi certificates")
+                    print(Color.info("NOTE:"), "Retrying with certifi certificates")
                     ssl_context = ssl.create_default_context(cafile=certifi.where())
-                    return self.downloader.simple_download(self._get_manifest_url())
+                    return self.downloader.simple_download(
+                        self._get_manifest_url(),
+                        cache_path=cache_path,
+                        display_name="VS Channel Manifest",
+                    )
                 except ModuleNotFoundError:
-                    print("ERROR: Please install 'certifi' package")
+                    print(Color.error("ERROR:"), "Please install 'certifi' package")
                     sys.exit(1)
             else:
                 raise
@@ -658,7 +710,7 @@ class VSInstaller:
         return json.loads(manifest_data)
 
     def get_vs_manifest(self, main_manifest):
-        """Download VS-specific manifest"""
+        """Download VS-specific manifest (with disk caching for ~15MB file)"""
         item_name = (
             "Microsoft.VisualStudio.Manifests.VisualStudioPreview"
             if self.args.preview
@@ -670,7 +722,15 @@ class VSInstaller:
         )
         payload_url = vs_item["payloads"][0]["url"]
 
-        vs_manifest_data = self.downloader.simple_download(payload_url)
+        # Cache the large VS manifest to disk (like C implementation)
+        cache_name = (
+            "vs_manifest_preview.json" if self.args.preview else "vs_manifest.json"
+        )
+        cache_path = DOWNLOADS_DIR / cache_name
+
+        vs_manifest_data = self.downloader.simple_download(
+            payload_url, cache_path=cache_path, display_name="VS Packages Manifest"
+        )
         return json.loads(vs_manifest_data)
 
     def parse_available_versions(self, vs_manifest):
